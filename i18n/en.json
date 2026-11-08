@@ -1,0 +1,10 @@
+{
+  "nothingPlaying": "Nothing playing",
+  "previous": "Previous track",
+  "next": "Next track",
+  "back10": "Back 10 seconds",
+  "forward10": "Forward 10 seconds",
+  "playPause": "Play / pause",
+  "goTo": "Go to player",
+  "goToNotFound": "Couldn't find the player window"
+}

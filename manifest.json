@@ -1,0 +1,50 @@
+{
+  "$schema": "https://raw.githubusercontent.com/omarchy/omarchy/main/schemas/plugin.json",
+  "schemaVersion": 1,
+  "id": "medrekit.soundwave",
+  "name": "Soundwave",
+  "version": "1.0.0",
+  "author": "Daniel Mędrek (MedrekIT)",
+  "description": "Live btop-style dot sound wave in the bar that follows the real audio, with a now-playing card: seek bar, transport controls, and a button that jumps to the playing window.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Soundwave",
+    "description": "Animated dot sound wave driven by cava; appears only while something is audible. Click for the now-playing card, middle-click to play/pause.",
+    "category": "Media",
+    "allowMultiple": false,
+    "defaultSection": "centerBegin",
+    "defaults": {
+      "columns": 10,
+      "height": 50
+    },
+    "schema": [
+      {
+        "key": "columns",
+        "type": "integer",
+        "label": "Dot columns",
+        "min": 4,
+        "max": 24,
+        "step": 1,
+        "defaultValue": 10,
+        "description": "How many dot columns the bar wave has (fewer on a vertical bar if they don't fit)."
+      },
+      {
+        "key": "height",
+        "type": "integer",
+        "label": "Wave height (%)",
+        "min": 30,
+        "max": 80,
+        "step": 5,
+        "defaultValue": 50,
+        "description": "How much of the bar's thickness the wave may use."
+      }
+    ]
+  },
+  "license": "MIT",
+  "repository": "https://github.com/MedrekIT/omarchy-soundwave"
+}
