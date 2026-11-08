@@ -398,13 +398,16 @@ BarWidget {
     columns: root.vertical ? Math.min(wantedColumns, fitColumns) : wantedColumns
     rows: 5
     // The whole wave takes `height` percent of the bar's thickness (30–80,
-    // default 50), leaving clear space above and below. Whole pixels keep
-    // the dots crisp: 5 dots + 4 gaps of half a dot is 7 dots tall.
+    // default 50), leaving clear space above and below.
+    // 5 dots + 4 gaps of half a dot is 7 dots tall.
     readonly property real heightSetting: Number(root.setting("height", 50)) || 50
     readonly property real heightFraction: Math.max(0.3, Math.min(0.8, heightSetting <= 1 ? heightSetting : heightSetting / 100))
     readonly property real maxHeight: root.barSize * heightFraction
-    dot: Math.max(2, Math.floor(maxHeight / 7))
-    gap: Math.max(1, Math.round(dot * 0.5))
+    // Sizes are not rounded to whole pixels: on a typical 26 px bar rounding
+    // left only one or two possible sizes, so the setting barely did anything.
+    // Round dots stay round when antialiased at fractional sizes.
+    dot: Math.max(1.5, maxHeight / 7)
+    gap: dot * 0.5
     levels: root.levels
     opacity: root.reveal
     color: root.audible ? root.fg : Qt.darker(root.fg, 1.6)

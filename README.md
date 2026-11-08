@@ -1,4 +1,4 @@
-# Soundwave — live dot sound wave for the Omarchy bar
+# Soundwave - live dot sound wave for the Omarchy bar
 
 A small, btop-style dot wave in your bar that follows the **real audio**
 coming out of your speakers. Click it for a now-playing card with a seek bar,
