@@ -6,5 +6,6 @@
   "forward10": "Forward 10 seconds",
   "playPause": "Play / pause",
   "goTo": "Go to player",
-  "goToNotFound": "Couldn't find the player window"
+  "goToNotFound": "Couldn't find the player window",
+  "playingNow": "Playing now"
 }

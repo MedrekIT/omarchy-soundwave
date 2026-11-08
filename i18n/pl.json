@@ -6,5 +6,6 @@
   "forward10": "10 sekund do przodu",
   "playPause": "Odtwórz / pauza",
   "goTo": "Przejdź do odtwarzacza",
-  "goToNotFound": "Nie znaleziono okna odtwarzacza"
+  "goToNotFound": "Nie znaleziono okna odtwarzacza",
+  "playingNow": "Teraz gra"
 }

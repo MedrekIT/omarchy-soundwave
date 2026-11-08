@@ -45,7 +45,7 @@ BarWidget {
   // Shown only while something can actually be heard (or its card is open).
   // After the sound stops it lingers a few seconds, so skipping tracks or a
   // quiet intro does not make it blink in and out.
-  readonly property bool wantShown: hasMedia && (popupOpen || (audible && !silent))
+  readonly property bool wantShown: hasMedia && (popupOpen || audible)
   readonly property bool shown: wantShown || (hasMedia && hideDelay.running)
   onWantShownChanged: if (!wantShown) hideDelay.restart()
   Timer { id: hideDelay; interval: 3000 }
@@ -102,39 +102,93 @@ BarWidget {
 
   // ------------------------------------------------------------- audio levels
   //
-  // Muted means nothing can be heard from this player: the output device is
-  // muted or at zero, or every PipeWire stream belonging to the player is.
-  // The graph then rests flat even though MPRIS still says "playing".
+  // What decides the widget is whether sound is actually playing, not what a
+  // player says about itself: a browser exposes one MPRIS player for all its
+  // tabs, so pausing one tab reports "Paused" while another keeps playing.
+  // PulseAudio's view of PipeWire (pactl) says per stream whether it is
+  // playing ("corked" means paused), and gives the tab or track title, so it
+  // can also name what is making the sound. `pactl subscribe` reports changes
+  // as they happen; the stream list is re-read only then.
   readonly property var sink: Pipewire.defaultAudioSink
   readonly property bool sinkMuted: !!sink && !!sink.audio && (sink.audio.muted || sink.audio.volume <= 0.001)
-  readonly property var playerStreams: {
+  PwObjectTracker { objects: root.sink ? [root.sink] : [] }
+
+  property bool pactlOk: false
+  // [{ app, title, pid, muted }] for every stream currently playing.
+  property var soundingStreams: []
+  readonly property var audibleStreams: soundingStreams.filter(function(st) { return !st.muted })
+  readonly property bool anyPlayerPlaying: {
+    var list = Mpris.players ? Mpris.players.values : []
+    for (var i = 0; i < list.length; i++) if (list[i] && list[i].isPlaying) return true
+    return false
+  }
+  // Something should be coming out of the speakers.
+  readonly property bool soundExpected: !sinkMuted && (pactlOk ? audibleStreams.length > 0 : anyPlayerPlaying)
+  // With cava, "audible" also means it actually hears something, which covers
+  // muted tabs and silent stretches; without it, trust the stream state.
+  readonly property bool audible: soundExpected && !(cavaAvailable && silent)
+
+  function cleanTitle(value) {
+    // Browsers prefix tab titles with an unread count, e.g. "(252) ".
+    return String(value || "").replace(/^\(\d+\)\s+/, "").replace(/\s+-\s+YouTube$/, "").slice(0, 200)
+  }
+
+  function parseSinkInputs(text) {
+    var list = null
+    try { list = JSON.parse(text) } catch (e) { return }
+    if (!Array.isArray(list)) return
     var out = []
-    var svc = mediaService
-    if (!svc || !player || !svc.playbackStreams) return out
-    var key = svc.streamLabelKey(svc.playerAppLabel(player))
-    if (!key) return out
-    var list = svc.playbackStreams
-    for (var i = 0; i < list.length; i++) {
-      var sk = svc.streamLabelKey(svc.rawStreamLabel(list[i]))
-      if (sk && (sk === key || sk.indexOf(key) !== -1 || key.indexOf(sk) !== -1)) out.push(list[i])
+    for (var i = 0; i < list.length && out.length < 20; i++) {
+      var si = list[i]
+      if (!si || si.corked) continue
+      var props = si.properties || {}
+      out.push({
+        app: String(props["application.name"] || props["application.process.binary"] || "").slice(0, 80),
+        title: cleanTitle(props["media.name"]),
+        pid: Number(props["application.process.id"]) || 0,
+        muted: !!si.mute
+      })
     }
-    return out
+    pactlOk = true
+    soundingStreams = out
   }
-  readonly property bool streamsMuted: {
-    if (playerStreams.length === 0) return false
-    for (var i = 0; i < playerStreams.length; i++) {
-      var a = playerStreams[i].audio
-      if (a && !a.muted && a.volume > 0.001) return false
+
+  Process {
+    id: sinkInputsProc
+    command: ["pactl", "-f", "json", "list", "sink-inputs"]
+    stdout: StdioCollector { onStreamFinished: root.parseSinkInputs(text) }
+  }
+
+  Timer {
+    id: sinkInputsRefresh
+    interval: 150
+    onTriggered: { sinkInputsProc.running = false; sinkInputsProc.running = true }
+  }
+
+  Process {
+    id: pactlSubscribe
+    command: ["pactl", "subscribe"]
+    running: true
+    stdout: SplitParser {
+      onRead: function(line) {
+        if (String(line).indexOf("sink-input") !== -1) sinkInputsRefresh.restart()
+      }
     }
-    return true
+    // pipewire-pulse restarted or pactl missing: retry later.
+    onExited: pactlRetry.restart()
   }
-  readonly property bool muted: sinkMuted || streamsMuted
-  readonly property bool audible: isPlaying && !muted
 
-  PwObjectTracker { objects: root.sink ? [root.sink].concat(root.playerStreams) : root.playerStreams }
+  Timer {
+    id: pactlRetry
+    interval: 10000
+    onTriggered: { pactlSubscribe.running = true; sinkInputsRefresh.restart() }
+  }
 
-  // Real spectrum from cava (64 bins, 0..100) while audible and on screen.
-  // Silence, including a muted browser tab, arrives as zeros.
+  Component.onCompleted: sinkInputsRefresh.restart()
+
+  // Real spectrum from cava (64 bins, 0..100) of everything on the output:
+  // with two things playing, the wave is their mix. Silence, including a
+  // muted browser tab, arrives as zeros.
   property bool cavaAvailable: false
   property var cavaLevels: []
   readonly property bool waveShown: visible && !(bar && bar.barHidden)
@@ -150,9 +204,9 @@ BarWidget {
   Process {
     id: cavaProc
     command: ["cava", "-p", root.cavaConfig]
-    // Runs whenever the player is audible, even while the widget is hidden,
+    // Runs whenever a stream is playing, even while the widget is hidden,
     // since it is also what notices the sound coming back.
-    running: root.cavaAvailable && root.audible
+    running: root.cavaAvailable && root.soundExpected
     onRunningChanged: {
       root.cavaLevels = []
       root.silent = false
@@ -209,20 +263,14 @@ BarWidget {
 
   // ---------------------------------------------------------- go to player
 
+  // What to look for among the windows: { pids, title, names, player }.
+  // `player` is set when the target is the MPRIS player, so it can also be
+  // asked to raise itself.
+  property var goTarget: null
+
   function goToPlayer() {
-    if (!player) return
-    clientsProc.running = false
-    clientsProc.running = true
-  }
-
-  // Score each Hyprland client against the active player: same process id
-  // (browsers put it in their MPRIS bus name), window title containing the
-  // track title (the playing tab is usually the active one), and a class that
-  // matches the player's desktop entry or name.
-  function pickClient(clients) {
     var p = player
-    if (!p || !Array.isArray(clients)) return null
-
+    if (!p) return
     var bus = String(p.dbusName || "")
     var pids = []
     var m = bus.match(/instance[_]?([0-9_]+)/)
@@ -230,11 +278,37 @@ BarWidget {
       var parts = m[1].split("_")
       for (var k = 0; k < parts.length; k++) if (parts[k]) pids.push(Number(parts[k]))
     }
+    goTarget = {
+      pids: pids,
+      title: String(p.trackTitle || ""),
+      names: [String(p.desktopEntry || ""), String(p.identity || ""),
+              bus.replace(/^org\.mpris\.MediaPlayer2\./, "").split(".")[0]],
+      player: p
+    }
+    clientsProc.running = false
+    clientsProc.running = true
+  }
 
-    var entry = String(p.desktopEntry || "").toLowerCase()
-    var ident = String(p.identity || "").toLowerCase()
-    var busApp = bus.replace(/^org\.mpris\.MediaPlayer2\./, "").split(".")[0].toLowerCase()
-    var track = String(p.trackTitle || "").toLowerCase()
+  // A row of the "Playing now" list: the stream's process and tab title.
+  function goToStream(st) {
+    if (!st) return
+    goTarget = { pids: st.pid ? [st.pid] : [], title: st.title, names: [st.app], player: null }
+    clientsProc.running = false
+    clientsProc.running = true
+  }
+
+  // Score each Hyprland client against the target: same process id, window
+  // title containing the track or tab title (the playing tab is usually the
+  // active one), and a window class matching the app's name.
+  function pickClient(clients) {
+    var t = goTarget
+    if (!t || !Array.isArray(clients)) return null
+    var title = String(t.title || "").toLowerCase()
+    var names = []
+    for (var n = 0; n < t.names.length; n++) {
+      var nm = String(t.names[n] || "").toLowerCase()
+      if (nm) names.push(nm)
+    }
 
     var best = null
     var bestScore = 0
@@ -244,10 +318,11 @@ BarWidget {
       var cls = String(c["class"] || c.initialClass || "").toLowerCase()
       var ctitle = String(c.title || "").toLowerCase()
       var score = 0
-      if (pids.indexOf(Number(c.pid)) !== -1) score += 4
-      if (track.length > 2 && ctitle.indexOf(track) !== -1) score += 3
-      if (cls && (cls === entry || cls === busApp || cls === ident
-          || (entry && cls.indexOf(entry) !== -1) || (busApp && cls.indexOf(busApp) !== -1))) score += 2
+      if (t.pids.indexOf(Number(c.pid)) !== -1) score += 4
+      if (title.length > 2 && ctitle.indexOf(title) !== -1) score += 3
+      for (var j = 0; j < names.length; j++) {
+        if (cls && (cls === names[j] || cls.indexOf(names[j]) !== -1 || names[j].indexOf(cls) !== -1)) { score += 2; break }
+      }
       if (score > bestScore) { best = c; bestScore = score }
     }
     return best
@@ -258,19 +333,22 @@ BarWidget {
     try { clients = JSON.parse(text) } catch (e) { clients = null }
     var target = pickClient(clients)
     var address = target ? String(target.address) : ""
+    var found = /^0x[0-9a-fA-F]{1,16}$/.test(address)
+    var p = goTarget ? goTarget.player : null
 
-    if (/^0x[0-9a-fA-F]{1,16}$/.test(address)) {
+    if (found) {
       focusProc.command = ["hyprctl", "dispatch", "hl.dsp.focus({ window = \"address:" + address + "\" })"]
       focusProc.running = false
       focusProc.running = true
     }
     // Let the player raise itself too; Chromium-based browsers switch to the
     // tab that is playing when asked.
-    if (player && player.canRaise) player.raise()
+    if (p && p.canRaise) p.raise()
 
-    if (!/^0x/.test(address) && !(player && player.canRaise) && bar && bar.shell)
+    if (!found && !(p && p.canRaise) && bar && bar.shell)
       bar.shell.summon("omarchy.osd", JSON.stringify({ icon: "media", message: strings.t("goToNotFound") }))
 
+    goTarget = null
     popupOpen = false
   }
 
@@ -329,7 +407,7 @@ BarWidget {
     gap: Math.max(1, Math.round(dot * 0.5))
     levels: root.levels
     opacity: root.reveal
-    color: root.audible && !root.silent ? root.fg : Qt.darker(root.fg, 1.6)
+    color: root.audible ? root.fg : Qt.darker(root.fg, 1.6)
   }
 
   MouseArea {
@@ -455,6 +533,78 @@ BarWidget {
         fontSize: Style.font.subtitle
         color: root.audible ? root.cardFg : Qt.darker(root.cardFg, 1.8)
         topColor: root.audible ? Commons.Color.accent : Qt.darker(root.cardFg, 1.8)
+      }
+
+      // Everything making sound right now, when that is more than the card's
+      // own player can tell: two sources at once, or sound from somewhere
+      // while the card's player is paused (e.g. another browser tab). The
+      // wave above is the mix of all of them. Click a row to go there.
+      Column {
+        id: soundingList
+        width: parent.width
+        spacing: Style.space(2)
+        visible: root.audibleStreams.length > 1 || (root.audibleStreams.length === 1 && !root.isPlaying)
+
+        Text {
+          textFormat: Text.PlainText
+          text: strings.t("playingNow")
+          color: Qt.darker(root.cardFg, 1.5)
+          font.family: root.bar ? root.bar.fontFamily : Style.font.family
+          font.pixelSize: Style.font.caption
+        }
+
+        Repeater {
+          model: soundingList.visible ? root.audibleStreams : []
+
+          Item {
+            id: streamRow
+            required property var modelData
+            width: soundingList.width
+            height: Math.max(rowIcon.implicitHeight, rowText.implicitHeight) + Style.space(6)
+
+            Rectangle {
+              anchors.fill: parent
+              radius: Style.spacing.labelGap
+              color: rowMouse.containsMouse ? Style.normalFillFor(root.cardFg, Commons.Color.accent) : "transparent"
+            }
+
+            Text {
+              id: rowIcon
+              anchors.left: parent.left
+              anchors.leftMargin: Style.space(6)
+              anchors.verticalCenter: parent.verticalCenter
+              textFormat: Text.PlainText
+              text: "󰕾"
+              color: Commons.Color.accent
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
+              font.pixelSize: Style.font.body
+            }
+
+            Text {
+              id: rowText
+              anchors.left: rowIcon.right
+              anchors.leftMargin: Style.space(8)
+              anchors.right: parent.right
+              anchors.rightMargin: Style.space(6)
+              anchors.verticalCenter: parent.verticalCenter
+              textFormat: Text.PlainText
+              text: (streamRow.modelData.title || streamRow.modelData.app)
+                + (streamRow.modelData.title && streamRow.modelData.app ? "  ·  " + streamRow.modelData.app : "")
+              color: root.cardFg
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
+              font.pixelSize: Style.font.bodySmall
+              elide: Text.ElideRight
+            }
+
+            MouseArea {
+              id: rowMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.goToStream(streamRow.modelData)
+            }
+          }
+        }
       }
 
       // Progress bar

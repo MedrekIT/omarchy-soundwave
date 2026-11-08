@@ -17,7 +17,13 @@ is playing from.
   all read as silence.
 - **Shows up only when something is audible.** It slides in like the tray
   drawer when sound starts and slides out a few seconds after it stops.
-  It stays put while its card is open.
+  It stays put while its card is open. It goes by which audio streams are
+  actually playing, not by what a player claims, so it keeps working when
+  two browser tabs play at once.
+- **Several sources at once.** The wave is the mix of everything you hear.
+  When more than one thing is playing, or sound comes from somewhere other
+  than the card's player, the card lists each source under **Playing now**,
+  by tab or track title and app. Click a row to jump to its window.
 - **Now-playing card:** album art, title, artist, and which app is playing,
   plus a three-line braille dot graph in your theme's accent colour.
 - **Seek bar** you can drag, with elapsed and total time.
@@ -110,10 +116,14 @@ The wave's smoothing lives in `cava.conf` in the plugin folder
 The plugin makes **no network requests**. It runs only these local
 processes:
 
-- `cava -p <plugin>/cava.conf` while a player is playing and not muted. It
-  reads the PipeWire output and writes numbers to the plugin. It also runs
-  while the widget is hidden, because it is what notices the sound coming
-  back. One cava process runs per monitor.
+- `pactl subscribe`, always. It is one long-running process that reports
+  when audio streams start, stop, or change. Only then does the plugin run
+  `pactl -f json list sink-inputs` to see which streams are playing and what
+  they are called.
+- `cava -p <plugin>/cava.conf` while an unmuted stream is playing. It reads
+  the PipeWire output and writes numbers to the plugin. It also runs while the
+  widget is hidden, because it is what notices sound in a stream. One set of
+  these processes runs per monitor.
 - `hyprctl clients -j`, followed by a focus dispatch, only when you press
   **Go to player**.
 
@@ -128,6 +138,10 @@ All track metadata is shown as plain text, never as rich text.
   and most music players always report it.
 - **Firefox can't switch tabs.** Go to player focuses the right Firefox window,
   but only Chromium-based browsers can also switch to the playing tab.
+- **Firefox has one media player for all its tabs.** The card's title, art,
+  and controls follow whichever tab Firefox reports, usually the one that
+  started playing last. Other playing tabs still show under **Playing now**
+  and still move the wave, but they can't be controlled from the card.
 
 ## Remove
 
