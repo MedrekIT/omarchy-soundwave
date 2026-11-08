@@ -2,7 +2,7 @@
 
 A small wave in your bar that follows the **real audio** coming out of your speakers. Click it for a now-playing card with a progress bar, controls, and a button that jumps straight to the window the sound is playing from.
 
-![The now-playing card, opened from the dot wave next to the clock](preview.png)
+![The now-playing card, opened from the dot wave next to the clock](docs/preview.png)
 
 ![The wave in the bar](docs/bar.png)
 
