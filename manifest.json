@@ -5,7 +5,9 @@
   "name": "Soundwave",
   "version": "1.0.0",
   "author": "Daniel Mędrek (MedrekIT)",
-  "description": "Live btop-style dot sound wave in the bar that follows the real audio, with a now-playing card: seek bar, transport controls, and a button that jumps to the playing window.",
+  "license": "MIT",
+  "description": "Live sound wave in the bar that follows the real audio, with a now-playing card: progress bar, controls, and a button that jumps to the playing window.",
+  "repository": "https://github.com/MedrekIT/omarchy-soundwave",
   "kinds": [
     "bar-widget"
   ],
@@ -14,10 +16,10 @@
   },
   "barWidget": {
     "displayName": "Soundwave",
-    "description": "Animated dot sound wave driven by cava; appears only while something is audible. Click for the now-playing card, middle-click to play/pause.",
-    "category": "Media",
+    "description": "Animated sound wave driven by cava; appears only while something is audible. Click for the now-playing card, middle-click to play/pause.",
+    "category": "Appearance",
     "allowMultiple": false,
-    "defaultSection": "centerBegin",
+    "defaultSection": "center",
     "defaults": {
       "columns": 10,
       "height": 50
@@ -44,7 +46,5 @@
         "description": "How much of the bar's thickness the wave may use."
       }
     ]
-  },
-  "license": "MIT",
-  "repository": "https://github.com/MedrekIT/omarchy-soundwave"
+  }
 }

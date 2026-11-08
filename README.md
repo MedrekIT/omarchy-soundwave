@@ -36,7 +36,7 @@ omarchy pkg add cava
 omarchy plugin add https://github.com/MedrekIT/omarchy-soundwave.git --enable
 ```
 
-By default it lands in `centerBegin`, just left of the clock.
+By default it lands in `center`.
 
 ### Put it anywhere on the bar
 
@@ -44,12 +44,11 @@ It works in every bar section:
 
 ```sh
 omarchy bar move medrekit.soundwave --section left          # with the workspaces
-omarchy bar move medrekit.soundwave --section centerBegin   # left of the clock (default)
-omarchy bar move medrekit.soundwave --section centerEnd     # right of the clock
+omarchy bar move medrekit.soundwave --section center        # right of the clock
 omarchy bar move medrekit.soundwave --section right         # with the status icons
 ```
 
-Add `--index N` to choose its position within a section. Avoid `center` itself: widgets there are centred as one group with the clock, so the clock would move off centre.
+Add `--index N` to choose its position within a section.
 
 ## Usage
 
