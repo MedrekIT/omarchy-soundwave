@@ -21,8 +21,22 @@ BarWidget {
   // Reuse Omarchy's media service for player selection so this widget agrees
   // with the media keys and OSD; fall back to the first MPRIS player.
   readonly property var mediaService: bar && bar.shell ? bar.shell.firstPartyServiceFor("omarchy.media") : null
-  readonly property var player: mediaService ? mediaService.activePlayer
-    : (Mpris.players && Mpris.players.values.length > 0 ? Mpris.players.values[0] : null)
+  // Without Omarchy's media service, the first MPRIS player is not the one
+  // making noise: every browser keeps a player for all its tabs, and a
+  // stopped one with no metadata sorts first and would hide the widget.
+  function pickPlayer() {
+    var list = Mpris.players ? Mpris.players.values : []
+    var titled = null
+    for (var i = 0; i < list.length; i++) {
+      var candidate = list[i]
+      if (!candidate) continue
+      if (candidate.isPlaying) return candidate
+      if (!titled && (candidate.trackTitle || candidate.trackArtist)) titled = candidate
+    }
+    return titled || (list.length > 0 ? list[0] : null)
+  }
+
+  readonly property var player: mediaService ? mediaService.activePlayer : pickPlayer()
 
   readonly property bool hasMedia: !!player && !!(player.trackTitle || player.trackArtist)
   readonly property bool isPlaying: !!player && !!player.isPlaying
